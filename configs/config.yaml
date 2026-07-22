@@ -1,0 +1,16 @@
+paths:
+  raw: data/raw/hotel_bookings.csv
+  interim: data/interim/hotel_clean.csv
+  processed: data/processed/
+  artifacts: artifacts/
+
+cleaning:
+  adr_ceiling: 1000.0
+  leakage_cols: [reservation_status]
+
+split:
+  test_size: 0.2
+  time_column: [arrival_date_year, arrival_date_month]
+  random_state: 42
+
+target: is_canceled

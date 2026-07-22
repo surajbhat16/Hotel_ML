@@ -1,0 +1,42 @@
+# Environments
+.venv/
+venv/
+mlops/
+.python-version
+
+# Python caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# uv
+# (uv.lock IS committed — it pins exact versions. Do not ignore it.)
+
+# Data — never commit raw or processed data to git; too large and often sensitive.
+# Commit the generation script instead, so data is reproducible.
+data/raw/*
+data/interim/*
+data/processed/*
+!data/**/.gitkeep
+
+# Model artifacts and experiment tracking
+artifacts/*
+!artifacts/.gitkeep
+mlruns/
+mlartifacts/
+
+# Notebooks checkpoints
+.ipynb_checkpoints/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Docs
+docs/*
