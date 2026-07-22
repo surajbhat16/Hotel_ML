@@ -47,6 +47,6 @@ hotel-ml/
 ## Setup
 
 ```bash
-pip install -r requirements.txt
-python src/ingestion/generate_dataset.py   # creates data/raw/hotel_bookings.csv
+uv sync --all-extras --dev
+uv run python src/ingestion/generate_dataset.py   # creates data/raw/hotel_bookings.csv
 ```
