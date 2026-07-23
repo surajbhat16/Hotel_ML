@@ -31,8 +31,8 @@ hotel-ml/
 ## Pipeline stages (roadmap)
 
 - [x] Stage 0 — Scaffold + data acquisition
-- [ ] Stage 1 — Data cleaning
-- [ ] Stage 2 — EDA + leakage hunting
+- [x] Stage 1 — Data cleaning
+- [x] Stage 2 — EDA + leakage hunting
 - [ ] Stage 3 — Feature engineering + encoding
 - [ ] Stage 4 — Feature selection + scaling + dimensionality reduction
 - [ ] Stage 5 — Imbalance handling + cross-validation design
@@ -43,6 +43,17 @@ hotel-ml/
 - [ ] Stage 10 — Drift detection + monitoring + retraining
 - [ ] Stage 11 — Demand forecasting model
 - [ ] Stage 12 — Dynamic pricing optimization
+
+## Exploratory analysis
+
+A comprehensive, presentation-grade EDA lives in `notebooks/01_eda.ipynb` (reads the **train split only** to respect the leakage firewall). To run it:
+
+```bash
+uv sync --extra notebook --dev
+uv run jupyter lab notebooks/01_eda.ipynb
+```
+
+It's regenerable from `notebooks/build_eda_notebook.py`.
 
 ## Setup
 

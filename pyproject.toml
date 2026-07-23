@@ -24,6 +24,13 @@ dependencies = [
 explain = [
     "shap>=0.46",
 ]
+notebook = [
+    "jupyter>=1.0",
+    "matplotlib>=3.7",
+    "seaborn>=0.12",
+    "plotly>=5.18",
+    "nbformat>=5.9",
+]
 
 [dependency-groups]
 dev = [
@@ -48,7 +55,7 @@ packages = ["src"]
 line-length = 100
 target-version = "py311"
 src = ["src", "tests"]
-extend-exclude = ["mlops"]
+extend-exclude = ["mlops", "notebooks", "docs", "q&a"]
 
 [tool.ruff.lint]
 # A curated, senior-level rule set: pycodestyle, pyflakes, isort, bugbear,

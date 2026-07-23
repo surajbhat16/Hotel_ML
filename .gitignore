@@ -40,3 +40,6 @@ mlartifacts/
 
 # Docs
 docs/*
+
+# Interview Q&A prep (local only)
+q&a/*
