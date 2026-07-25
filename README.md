@@ -34,8 +34,8 @@ hotel-ml/
 - [x] Stage 1 — Data cleaning
 - [x] Stage 2 — EDA + leakage hunting
 - [x] Stage 3 — Feature engineering + encoding
-- [ ] Stage 4 — Feature selection + scaling + dimensionality reduction
-- [ ] Stage 5 — Imbalance handling + cross-validation design
+- [x] Stage 4 — Feature selection + scaling + dimensionality reduction
+- [x] Stage 5 — Imbalance handling + cross-validation design
 - [ ] Stage 6 — Model training + hyperparameter tuning
 - [ ] Stage 7 — Evaluation + calibration + explainability
 - [ ] Stage 8 — Serving (FastAPI + Docker)
