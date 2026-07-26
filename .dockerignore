@@ -1,0 +1,24 @@
+# Keep the Docker build context small and the image clean.
+.venv/
+mlops/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.git/
+.github/
+notebooks/
+docs/
+q&a/
+tests/
+data/
+mlruns/
+*.db
+# Keep only the three artifacts the Dockerfile explicitly copies; ignore the rest.
+artifacts/*.json
+!artifacts/encoding_maps.json
+!artifacts/scaler_stats.json
+artifacts/evaluation_report.json
+artifacts/feature_rankings.json
+artifacts/shap_report.json

@@ -38,7 +38,7 @@ hotel-ml/
 - [x] Stage 5 — Imbalance handling + cross-validation design
 - [x] Stage 6 — Model training + hyperparameter tuning
 - [x] Stage 7 — Evaluation + calibration + explainability
-- [ ] Stage 8 — Serving (FastAPI + Docker)
+- [x] Stage 8 — Serving (FastAPI + Docker)
 - [ ] Stage 9 — Streaming simulation
 - [ ] Stage 10 — Drift detection + monitoring + retraining
 - [ ] Stage 11 — Demand forecasting model
