@@ -40,7 +40,7 @@ hotel-ml/
 - [x] Stage 7 — Evaluation + calibration + explainability
 - [x] Stage 8 — Serving (FastAPI + Docker)
 - [x] Stage 9 — Streaming simulation
-- [ ] Stage 10 — Drift detection + monitoring + retraining
+- [x] Stage 10 — Drift detection + monitoring + retraining
 - [ ] Stage 11 — Demand forecasting model
 - [ ] Stage 12 — Dynamic pricing optimization
 
