@@ -2,8 +2,10 @@
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from src.models import demand, pricing
+from src.serving.inference import InferencePipeline
 
 # --------------------------------- demand ---------------------------------
 
@@ -107,3 +109,24 @@ def test_elasticity_changes_recommendation():
     inelastic = pricing.optimize_price(3000, 110, 0.33, elasticity=-0.8)
     elastic = pricing.optimize_price(3000, 110, 0.33, elasticity=-2.0)
     assert inelastic["recommended_price"] != elastic["recommended_price"]
+
+
+# ------------------------- live-model base_cancel estimate -------------------------
+
+
+@pytest.fixture(scope="module")
+def pipe():
+    return InferencePipeline()
+
+
+def test_estimate_base_cancel_rate_in_unit_interval(pipe):
+    sample = pd.read_csv("data/processed/test.csv").drop(columns=["is_canceled"])
+    rate = pricing.estimate_base_cancel_rate(pipe, sample, sample_size=25)
+    assert 0.0 <= rate <= 1.0
+
+
+def test_estimate_base_cancel_rate_is_deterministic_for_fixed_seed(pipe):
+    sample = pd.read_csv("data/processed/test.csv").drop(columns=["is_canceled"])
+    r1 = pricing.estimate_base_cancel_rate(pipe, sample, sample_size=25, random_state=1)
+    r2 = pricing.estimate_base_cancel_rate(pipe, sample, sample_size=25, random_state=1)
+    assert r1 == r2

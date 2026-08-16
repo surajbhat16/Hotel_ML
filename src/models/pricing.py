@@ -32,14 +32,19 @@ Run:  python src/models/pricing.py
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
+
+if TYPE_CHECKING:
+    from src.serving.inference import InferencePipeline
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(message)s")
 log = logging.getLogger("pricing")
 
 SERIES_IN = "data/processed/demand_series.csv"
+BOOKING_SAMPLE_IN = "data/processed/test.csv"
 
 
 def demand_at_price(
@@ -62,6 +67,25 @@ def cancel_prob_at_price(
     how strongly price nudges cancellation."""
     adjusted = base_cancel * (1 + sensitivity * (price / ref_price - 1))
     return float(np.clip(adjusted, 0.0, 0.95))
+
+
+def estimate_base_cancel_rate(
+    pipeline: InferencePipeline,
+    booking_sample: pd.DataFrame,
+    sample_size: int = 300,
+    random_state: int = 42,
+) -> float:
+    """Portfolio-average cancellation probability, scored by the real trained
+    model over a sample of actual bookings. This is the base_cancel signal
+    pricing needs: not a single booking's risk (pricing operates on a whole
+    period's worth of demand, not one reservation), but the model's genuine
+    view of how risky the current booking mix is, replacing the hardcoded
+    constant that previously stood in for it.
+    """
+    n = min(sample_size, len(booking_sample))
+    sample = booking_sample.sample(n=n, random_state=random_state)
+    probs = [pipeline.predict_proba(row.to_dict()) for _, row in sample.iterrows()]
+    return float(np.mean(probs))
 
 
 def expected_revenue(
@@ -144,11 +168,17 @@ def price_for_period(
 
 
 if __name__ == "__main__":
-    series = pd.read_csv(SERIES_IN)
+    from src.serving.inference import InferencePipeline
 
-    # Reference price ~ typical ADR; base cancel ~ portfolio rate.
+    series = pd.read_csv(SERIES_IN)
+    booking_sample = pd.read_csv(BOOKING_SAMPLE_IN).drop(columns=["is_canceled"])
+    pipeline = InferencePipeline()
+
+    # Reference price ~ typical ADR; base cancel = live model estimate, not a
+    # hardcoded portfolio constant.
     REF_PRICE = 110.0
-    BASE_CANCEL = 0.33
+    BASE_CANCEL = estimate_base_cancel_rate(pipeline, booking_sample)
+    log.info("Model-estimated portfolio cancellation rate: %.4f", BASE_CANCEL)
 
     log.info("=" * 60)
     log.info("Single-price optimisation demo (fixed demand):")

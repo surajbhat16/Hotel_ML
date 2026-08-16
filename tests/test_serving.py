@@ -131,3 +131,38 @@ def test_custom_threshold_changes_label(client):
     r_lo = client.post("/predict?threshold=0.01", json=VALID_BOOKING)
     assert r_hi.json()["will_cancel"] is False
     assert r_lo.json()["will_cancel"] is True
+
+
+def test_forecast_returns_positive_bookings(client):
+    r = client.get("/forecast")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["forecast_bookings"] > 0
+    assert body["based_on_periods"] > 0
+
+
+def test_price_default_request(client):
+    r = client.post("/price", json={})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["recommended_price"] > 0
+    assert 0.0 <= body["base_cancel_rate"] <= 1.0
+    assert "optimum_at_price_bound" in body
+
+
+def test_price_uses_live_model_estimate_not_hardcoded_constant(client):
+    """The base_cancel_rate must come from the trained model's own portfolio
+    estimate, not the 0.33 constant the pricing script used to hardcode."""
+    r = client.post("/price", json={})
+    assert r.json()["base_cancel_rate"] != 0.33
+
+
+def test_price_rejects_non_negative_elasticity(client):
+    r = client.post("/price", json={"elasticity": 1.5})
+    assert r.status_code == 422
+
+
+def test_price_custom_reference_price_changes_recommendation(client):
+    r_low_ref = client.post("/price", json={"reference_price": 80})
+    r_high_ref = client.post("/price", json={"reference_price": 300})
+    assert r_low_ref.json()["recommended_price"] != r_high_ref.json()["recommended_price"]

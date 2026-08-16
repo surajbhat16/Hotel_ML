@@ -28,8 +28,9 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Literal
+from typing import Any, Literal
 
+import pandas as pd
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
@@ -42,14 +43,37 @@ except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
     from src.serving.inference import InferencePipeline
 
+try:
+    from src.models.demand import forecast_next
+    from src.models.pricing import estimate_base_cancel_rate, price_for_period
+except ModuleNotFoundError:
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    from src.models.demand import forecast_next
+    from src.models.pricing import estimate_base_cancel_rate, price_for_period
+
 logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(message)s")
 log = logging.getLogger("api")
 
 # Default operating threshold: the cost-optimal value found in Stage 7.
 DEFAULT_THRESHOLD = 0.30
 
+# Reference nightly rate for pricing when the caller doesn't supply one.
+DEFAULT_REF_PRICE = 110.0
+
+DEMAND_SERIES_FILE = "data/processed/demand_series.csv"
+BOOKING_SAMPLE_FILE = "data/processed/test.csv"
+# How many real bookings the portfolio cancellation-rate estimate is averaged
+# over. Computed once at startup (see lifespan) -- not per request, for the
+# same reason the model itself is loaded once: re-scoring hundreds of rows on
+# every /price call would add seconds of latency for no benefit, since the
+# portfolio's risk profile doesn't change between requests.
+CANCEL_RATE_SAMPLE_SIZE = 200
+
 # Module-level holder; populated at startup so the model loads exactly once.
-_state: dict[str, InferencePipeline] = {}
+_state: dict[str, Any] = {}
 
 
 class BookingRequest(BaseModel):
@@ -111,11 +135,55 @@ class PredictionResponse(BaseModel):
     risk_band: Literal["low", "medium", "high"]
 
 
+class ForecastResponse(BaseModel):
+    """Next period's forecast net demand (arrivals net of cancellations)."""
+
+    forecast_bookings: float
+    based_on_periods: int
+
+
+class PriceRequest(BaseModel):
+    reference_price: float = Field(default=DEFAULT_REF_PRICE, gt=0)
+    elasticity: float = Field(
+        default=-1.2, lt=0, description="demand % change per 1% price change; must be negative"
+    )
+
+
+class PriceResponse(BaseModel):
+    recommended_price: float
+    reference_price: float
+    forecast_demand: float
+    expected_revenue_at_recommended: float
+    expected_revenue_at_reference: float
+    revenue_uplift_pct: float
+    base_cancel_rate: float
+    optimum_at_price_bound: bool
+
+
+_DEFAULT_PRICE_REQUEST = PriceRequest()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Load the model + artifacts once when the service starts."""
     log.info("Loading inference pipeline...")
-    _state["pipeline"] = InferencePipeline()
+    pipeline = InferencePipeline()
+    _state["pipeline"] = pipeline
+
+    log.info("Loading demand series...")
+    _state["demand_series"] = pd.read_csv(DEMAND_SERIES_FILE)
+
+    log.info(
+        "Estimating portfolio cancellation rate from %d sampled bookings via the "
+        "trained model (this replaces pricing's old hardcoded constant)...",
+        CANCEL_RATE_SAMPLE_SIZE,
+    )
+    booking_sample = pd.read_csv(BOOKING_SAMPLE_FILE).drop(columns=["is_canceled"])
+    _state["base_cancel_rate"] = estimate_base_cancel_rate(
+        pipeline, booking_sample, sample_size=CANCEL_RATE_SAMPLE_SIZE
+    )
+    log.info("Portfolio cancellation rate estimate: %.4f", _state["base_cancel_rate"])
+
     log.info("Service ready.")
     yield
     _state.clear()
@@ -157,6 +225,50 @@ def predict(booking: BookingRequest, threshold: float = DEFAULT_THRESHOLD) -> Pr
     )
 
 
+@app.get("/forecast", response_model=ForecastResponse)
+def forecast() -> ForecastResponse:
+    """Forecast next period's net bookings (Stage 11 demand model)."""
+    series = _state["demand_series"]
+    prediction = forecast_next(series)
+    return ForecastResponse(
+        forecast_bookings=round(prediction, 1),
+        based_on_periods=len(series),
+    )
+
+
+@app.post("/price", response_model=PriceResponse)
+def price(request: PriceRequest = _DEFAULT_PRICE_REQUEST) -> PriceResponse:
+    """Recommend a revenue-maximising nightly rate for the next period.
+
+    Ties the demand forecast (Stage 11) to the cancellation model's live
+    portfolio-risk estimate (Stage 1-7), computed once at startup -- see
+    lifespan. This is a decision-support number, not an autonomous price-setter.
+    """
+    series = _state["demand_series"]
+    base_cancel = _state["base_cancel_rate"]
+    result = price_for_period(
+        series,
+        ref_price=request.reference_price,
+        base_cancel=base_cancel,
+        elasticity=request.elasticity,
+    )
+    return PriceResponse(
+        recommended_price=result["recommended_price"],
+        reference_price=result["reference_price"],
+        forecast_demand=result["forecast_demand"],
+        expected_revenue_at_recommended=result["expected_revenue_at_recommended"],
+        expected_revenue_at_reference=result["expected_revenue_at_reference"],
+        revenue_uplift_pct=result["revenue_uplift_pct"],
+        base_cancel_rate=round(base_cancel, 4),
+        optimum_at_price_bound=result["optimum_at_price_bound"],
+    )
+
+
 @app.get("/")
 def root() -> dict:
-    return {"service": "hotel-cancellation", "docs": "/docs", "health": "/health"}
+    return {
+        "service": "hotel-cancellation",
+        "docs": "/docs",
+        "health": "/health",
+        "endpoints": ["/predict", "/forecast", "/price"],
+    }

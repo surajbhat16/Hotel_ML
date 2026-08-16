@@ -107,8 +107,13 @@ uv run python src/features/encode.py
 uv run python src/features/scale.py
 uv run python src/models/train.py --quick   # ~1 min; drop --quick for the full Optuna sweep
 
+uv run python src/models/demand.py     # writes data/processed/demand_series.csv, needed by /forecast and /price
+
 uv run uvicorn src.serving.app:app --reload
-# POST a booking to http://127.0.0.1:8000/predict — interactive docs at /docs
+# POST a booking to http://127.0.0.1:8000/predict     — cancellation risk
+# GET  http://127.0.0.1:8000/forecast                 — next-period demand
+# POST http://127.0.0.1:8000/price                    — revenue-maximising nightly rate
+# interactive docs (try all three from the browser) at /docs
 ```
 
 Run the whole quality gate:
@@ -162,13 +167,14 @@ hotel-ml/
 I'd rather list these than have someone else find them first.
 
 1. **Target encoding is a no-op in production.** `encode.py` persists per-level maps for frequency encoding but only summary statistics (prior, smoothing constant) for target encoding — so the serving path currently falls back to a constant prior for `country_te`/`agent_te`/`company_te` on every request, regardless of the actual value submitted. SHAP ranked `agent_te` as a top-12 global feature on the trained model; the served version is quietly not using it. Fix is straightforward: persist the full per-level map the way frequency encoding already does.
-2. **The pricing engine doesn't call the cancellation model yet.** `pricing.py`'s docstring describes it as where "the cancellation model and the demand forecast meet," but `cancel_prob_at_price()` currently uses a hardcoded portfolio-average cancellation rate rather than the trained model's live prediction. The demand-forecast integration is real and working; the cancellation-model half isn't wired up.
-3. **The default price-elasticity assumption produces boundary solutions, not interior ones.** With the current constant-elasticity demand curve, the revenue-maximizing price is mathematically guaranteed to land on the edge of the search grid for any elasticity with magnitude greater than 1 — meaning the "optimal" price is really just the cheapest or most expensive price the grid allows to be considered, not a genuine sweet spot. The code already computes a flag for this (`optimum_at_price_bound`) but doesn't surface it in the demo output. Needs either a real cost/capacity floor or a saturating demand curve to produce an interior optimum.
-4. **Single-row inference isn't batched.** The monitoring flow's performance check scores a 4,000-row window one booking at a time through the full single-row pipeline, which takes roughly 2.5 minutes — fine today, a real bottleneck if the monitoring window or schedule frequency grows. Needs a batched `transform`/`predict` path.
-5. **CI doesn't yet provision a model artifact.** The serving integration tests load the real trained model from `artifacts/`, which is git-ignored by design (models don't belong in git history) — so CI will fail on a clean checkout until a training or artifact-restore step is added ahead of the test job.
-6. **Cancellation model complexity isn't earning its keep yet.** Optuna-tuned LightGBM ties a plain logistic regression on PR-AUC. That's an honest result, not a bug, but the real next step is feature work — richer agent/company signal, better temporal features — rather than more hyperparameter search, which has already shown diminishing returns here.
+2. **The default price-elasticity assumption produces boundary solutions, not interior ones.** With the current constant-elasticity demand curve, the revenue-maximizing price is mathematically guaranteed to land on the edge of the search grid for any elasticity with magnitude greater than 1 — meaning the "optimal" price is really just the cheapest or most expensive price the grid allows to be considered, not a genuine sweet spot. The API now surfaces this directly as `optimum_at_price_bound` in the `/price` response instead of burying it. Needs either a real cost/capacity floor or a saturating demand curve to produce an interior optimum.
+3. **Single-row inference isn't batched.** The monitoring flow's performance check scores a 4,000-row window one booking at a time through the full single-row pipeline, which takes roughly 2.5 minutes — fine today, a real bottleneck if the monitoring window or schedule frequency grows. Needs a batched `transform`/`predict` path. The same limitation is why `/price`'s portfolio cancellation-rate estimate is computed once at API startup (sampling 200 bookings, ~5s) rather than per request — see [docs/PhaseAPI.pdf](docs/PhaseAPI.pdf).
+4. **CI doesn't yet provision a model artifact.** The serving integration tests load the real trained model from `artifacts/`, which is git-ignored by design (models don't belong in git history) — so CI will fail on a clean checkout until a training or artifact-restore step is added ahead of the test job.
+5. **Cancellation model complexity isn't earning its keep yet.** Optuna-tuned LightGBM ties a plain logistic regression on PR-AUC. That's an honest result, not a bug, but the real next step is feature work — richer agent/company signal, better temporal features — rather than more hyperparameter search, which has already shown diminishing returns here.
 
-None of these are hidden — they're the actual state of the repo, and fixing #1 and #5 is next on my list.
+None of these are hidden — they're the actual state of the repo, and fixing #1 and #4 is next on my list.
+
+~~The pricing engine doesn't call the cancellation model.~~ **Fixed.** `/price` now calls `estimate_base_cancel_rate()` in `pricing.py`, which scores a real sample of bookings through the trained `InferencePipeline` and averages the result — replacing the hardcoded 0.33 constant everywhere pricing runs, including the standalone `pricing.py` script. Full details in [docs/PhaseAPI.pdf](docs/PhaseAPI.pdf).
 
 ## Tech stack
 
